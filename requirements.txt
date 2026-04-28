@@ -1,0 +1,8 @@
+requests
+cloudscraper
+playwright
+beautifulsoup4
+pandas
+tqdm
+lxml
+fake-useragent
