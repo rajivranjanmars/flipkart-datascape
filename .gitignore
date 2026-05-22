@@ -52,7 +52,11 @@ Thumbs.db
 
 # Runtime logs
 logs/
+*.log
 
 # Project data exports
 data/*.csv
 data/*.json
+data/*.txt
+data/*.zip
+data/runs/
