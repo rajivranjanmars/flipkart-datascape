@@ -1,137 +1,112 @@
 # Batch Workflows
 
-This document explains the two batch scrapers and how they fit together.
+How the batch stages fit together, for any supported site (`flipkart`, `amazon`,
+`myntra`, `meesho`). Everything below is available both in the interactive app
+(`python -m scraper`) and as flag-based commands (shown here).
 
 ## Overview
 
-There are two batch stages:
-
-1. product discovery
-2. review enrichment
-
-The normal flow is:
-
 ```text
-batch_product_scraper -> product CSVs -> batch_review_scraper -> review CSVs and reports
+products  ->  product CSVs  ->  reviews  ->  review CSVs + reports
 ```
+
+`pipeline` runs both stages back-to-back into one output directory.
+
+> Reviews are only supported on review-capable sites (Flipkart, Amazon). Myntra
+> and Meesho are product-listing only.
 
 ## 1. Product discovery
 
-Use the product batch scraper to collect product listings for the configured subcategories.
+Collect listings for a site's preset categories:
 
 ```bash
-python -m scraper.batch_product_scraper \
-  --output-dir data/runs/20260522_products \
+python -m scraper products \
+  --site flipkart \
+  --output-dir data/runs/fk_products \
   --max-products 100 \
   --concurrency 4 \
-  --retries 2
+  --profile balanced
 ```
 
-### What it reads
+The preset category list lives in each adapter's `default_targets`
+(e.g. `scraper.sites.flipkart.FlipkartAdapter.default_targets`).
 
-The scraper uses the fixed subcategory list defined in `scraper.batch_product_scraper.SUBCATEGORY_TARGETS`.
-
-### What it writes
-
-The output directory contains:
-- one CSV per subcategory
-- `run_report.json`
-- `run_report.txt`
-- `flipkart_product_csvs.zip`
-
-### When to use it
-
-Use this step when you want a repeatable product catalog snapshot before scraping reviews.
-
-## 2. Review enrichment
-
-Use the review batch scraper to read the product CSVs and collect product-level reviews.
+For a single ad-hoc query or a full listing URL instead of the presets:
 
 ```bash
-python -m scraper.batch_review_scraper \
-  --product-dir data/runs/20260522_products \
-  --output-dir data/runs/20260522_reviews \
+python -m scraper search "smartphones" --site flipkart --output-dir data/runs/fk_search --max-products 50
+python -m scraper search "https://www.flipkart.com/search?q=laptops" --site flipkart --output-dir data/runs/fk_url
+```
+
+### Product output
+
+- `<category>-<subcategory>.csv` — one per preset category
+- `<site>-search-<query>.csv` — for `search` mode
+- `run_report.json` / `run_report.txt`
+- `<site>_product_csvs.zip`
+
+## 2. Review enrichment (resumable)
+
+Read product CSVs and collect reviews:
+
+```bash
+python -m scraper reviews \
+  --site flipkart \
+  --product-dir data/runs/fk_products \
+  --output-dir data/runs/fk_reviews \
   --max-reviews 100 \
-  --concurrency 4 \
-  --retries 2
+  --concurrency 8 \
+  --profile balanced
 ```
 
-### Uncapped and resumable mode
-
-For long-running collection jobs:
+### Uncapped, gentle, long-running
 
 ```bash
-python -m scraper.batch_review_scraper \
-  --product-dir data/runs/20260522_products \
-  --output-dir data/runs/20260522_reviews \
+python -m scraper reviews \
+  --site flipkart \
+  --product-dir data/runs/fk_products \
+  --output-dir data/runs/fk_reviews \
   --max-reviews 0 \
-  --concurrency 1 \
-  --retries 3 \
-  --wait-seconds 8 \
-  --empty-retry-wait-seconds 12 \
-  --page-delay-seconds 2 \
-  --product-delay-seconds 5
+  --concurrency 2 \
+  --profile polite
 ```
 
-Important behavior:
-- `--max-reviews 0` means no per-product review cap
-- progress is written incrementally as each product completes
-- `product_review_status.csv` is used as the resume ledger
-- rerunning the same command continues from already-completed products
+Behavior:
+- `--max-reviews 0` = no per-product cap
+- progress is written to disk as each product completes
+- `product_review_status.csv` is the resume ledger
+- **rerun the same command to resume**; add `--no-resume` to start fresh
 - log lines include UTC timestamps and elapsed runtime
 
-## Main output files
+### Review output
 
-### Product stage
+- `combined_reviews.csv` — all reviews in one file
+- `<category>-<subcategory>-reviews.csv` — per category
+- `product_review_status.csv` — resume ledger
+- `empty_products.csv` / `failed_products.csv`
+- `review_run_report.json` / `.txt`
+- `<site>_review_csvs.zip`
 
-- `*-<subcategory>.csv`: product listing rows
-- `run_report.json`: structured run summary
-- `run_report.txt`: plain-text run summary
-- `flipkart_product_csvs.zip`: packaged CSV and reports
+## 3. Full pipeline
 
-### Review stage
-
-- `combined_reviews.csv`: all review rows in one file
-- `*-reviews.csv`: one review CSV per subcategory
-- `product_review_status.csv`: completion ledger for resume
-- `empty_products.csv`: products with no parsed reviews
-- `failed_products.csv`: products that failed during scraping
-- `review_run_report.json`: structured review run summary
-- `review_run_report.txt`: plain-text review run summary
-- `scrape_config.json`: persisted runtime configuration
-- `flipkart_review_csvs.zip`: packaged outputs
-
-## Restarting an interrupted review run
-
-If a review run stops, rerun the same command with the same `--output-dir`.
-
-Example:
+Products then reviews, into `<output-dir>/products` and `<output-dir>/reviews`:
 
 ```bash
-python -m scraper.batch_review_scraper \
-  --product-dir data/runs/20260522_products \
-  --output-dir data/runs/20260522_reviews \
-  --max-reviews 0 \
-  --concurrency 1 \
-  --retries 3 \
-  --wait-seconds 8 \
-  --empty-retry-wait-seconds 12 \
-  --page-delay-seconds 2 \
-  --product-delay-seconds 5
+python -m scraper pipeline \
+  --site flipkart \
+  --output-dir data/runs/fk_all \
+  --max-products 50 \
+  --max-reviews 50 \
+  --profile fast
 ```
 
-If you intentionally want to ignore previous progress and start fresh, add:
+## Speed profiles
 
-```bash
---no-resume
-```
+`--profile fast|balanced|polite` trades speed for politeness (resource blocking,
+wait times, and default concurrency). See the README table. Use `--concurrency 0`
+to accept the profile's default.
 
-## Legacy single-run entrypoint
+## Restarting an interrupted run
 
-`main.py` remains available for a simpler one-URL workflow.
-
-```bash
-python main.py "https://www.flipkart.com/search?q=smartphones" --max-products 20 --output-dir data
-```
-
-Use it when you want a quick CSV from one listing URL instead of the full batch pipeline.
+Rerun the exact same `reviews` (or `pipeline`) command with the same
+`--output-dir`. Completed products are skipped via the resume ledger.

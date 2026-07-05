@@ -20,9 +20,17 @@ python -m playwright install
 ## Running tests
 
 ```bash
-python -m unittest tests.test_batch_product_scraper tests.test_batch_review_scraper
-python -m py_compile scraper/batch_product_scraper.py scraper/batch_review_scraper.py
+python -m unittest tests.test_engine tests.test_adapters tests.test_batch tests.test_browser tests.test_cookies
+python -m py_compile scraper/*.py scraper/core/*.py scraper/sites/*.py
 ```
+
+Tests run fully offline (HTML/JSON fixtures + a fake browser session).
+
+## Adding a marketplace
+
+Implement a `SiteAdapter` subclass in `scraper/sites/`, register it in
+`scraper/sites/registry.py`, and add fixture-based tests in `tests/`. The shared
+engine (`scraper/core/`) provides browsing, concurrency, resume, and reporting.
 
 ## Guidelines
 
