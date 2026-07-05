@@ -101,7 +101,17 @@ def _chrome_user_agent(major: str) -> str:
 
 
 def _stealth_headers(major: str) -> dict[str, str]:
-    """Client-hint and fetch-metadata headers a real Chrome sends."""
+    """Client-hint headers a real Chrome sends.
+
+    Deliberately excludes ``sec-fetch-*``: those vary per request (a script
+    fetch needs ``sec-fetch-dest: script``, not ``document``), but
+    ``context.set_extra_http_headers`` applies one fixed set to every request
+    on the context. Forcing document-nav values onto every subresource request
+    makes current Chromium reject them outright with ``net::ERR_INVALID_ARGUMENT``
+    — which silently broke every request past the initial page load (scripts,
+    XHR, the works). Chromium already sets correct per-request sec-fetch-*
+    values on its own; don't override them.
+    """
 
     return {
         "sec-ch-ua": f'"Chromium";v="{major}", "Not_A Brand";v="24", "Google Chrome";v="{major}"',
@@ -113,10 +123,6 @@ def _stealth_headers(major: str) -> dict[str, str]:
         ),
         "Accept-Language": "en-IN,en;q=0.9",
         "Upgrade-Insecure-Requests": "1",
-        "sec-fetch-dest": "document",
-        "sec-fetch-mode": "navigate",
-        "sec-fetch-site": "none",
-        "sec-fetch-user": "?1",
     }
 
 
