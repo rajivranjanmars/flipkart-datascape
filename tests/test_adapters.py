@@ -148,8 +148,49 @@ class MyntraTest(unittest.TestCase):
         self.assertEqual(record.ratings_count, "1500")
         self.assertEqual(record.product_id, "12345")
 
-    def test_reviews_unsupported(self) -> None:
-        self.assertFalse(MyntraAdapter().supports_reviews)
+    def test_supports_reviews(self) -> None:
+        self.assertTrue(MyntraAdapter().supports_reviews)
+
+    def test_review_url(self) -> None:
+        url = MyntraAdapter().get_reviews_url(
+            "https://www.myntra.com/casual-shoes/hrx/hrx-shoes/29553912/buy"
+        )
+        self.assertEqual(url, "https://www.myntra.com/web/v1/reviews/batch/29553912?size=20&page=1")
+
+    def test_build_review_page_url(self) -> None:
+        url = MyntraAdapter().build_review_page_url(
+            "https://www.myntra.com/web/v1/reviews/batch/29553912?size=20&page=1", 3
+        )
+        self.assertEqual(url, "https://www.myntra.com/web/v1/reviews/batch/29553912?size=20&page=3")
+
+
+class MyntraReviewTest(unittest.TestCase):
+    # Real responses come back HTML-wrapped: Chromium renders a raw JSON
+    # navigation as <html><body><pre>{...}</pre></body></html>.
+    HTML = """
+    <html><head></head><body><pre>{"reviews":[
+      {"id":"r1","userRating":5,"review":"Great fit and comfortable",
+       "userName":"Rahul","upvotes":"3","updatedAt":"1735689600000",
+       "styleAttribute":[{"name":"Size bought","value":"9"}]}
+    ]}</pre></body></html>
+    """
+
+    def test_parse_reviews(self) -> None:
+        reviews = MyntraAdapter().parse_reviews(self.HTML, "http://x/29553912/buy", "Shoes")
+        self.assertEqual(len(reviews), 1)
+        review = reviews[0]
+        self.assertEqual(review["rating"], 5)
+        self.assertEqual(review["body"], "Great fit and comfortable")
+        self.assertEqual(review["reviewer"], "Rahul")
+        self.assertEqual(review["date"], "2025-01-01")
+        self.assertEqual(review["helpful_count"], 3)
+        self.assertEqual(review["variant"], "Size bought: 9")
+
+    def test_parse_reviews_empty_payload(self) -> None:
+        reviews = MyntraAdapter().parse_reviews(
+            '<html><body><pre>{"reviews":[]}</pre></body></html>', "http://x", "Shoes"
+        )
+        self.assertEqual(reviews, [])
 
 
 class MeeshoTest(unittest.TestCase):
