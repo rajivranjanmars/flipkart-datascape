@@ -1,8 +1,6 @@
-requests
-cloudscraper
+# Core runtime dependencies (only what the code imports).
 playwright
 beautifulsoup4
-pandas
-tqdm
 lxml
-fake-useragent
+rich
+python-dotenv

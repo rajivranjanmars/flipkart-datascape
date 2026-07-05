@@ -1,0 +1,12 @@
+flowchart TD
+    A[Start] --> B{Choose workflow}
+
+    B --> C[main.py]
+    C --> D[Single review CSV]
+
+    B --> E[batch_product_scraper.py]
+    E --> F[Product CSV files]
+    F --> G[batch_review_scraper.py]
+    G --> H[Review CSV files]
+    G --> I[Status file for resume]
+    G --> J[Reports and ZIP files]

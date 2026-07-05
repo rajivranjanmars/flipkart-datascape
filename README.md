@@ -1,229 +1,248 @@
-# Flipkart Datascape
+# Datascape — multi-marketplace scraper
 
-A Python toolkit for collecting Flipkart product listings and review data in structured CSV, JSON, and ZIP outputs.
+An interactive terminal toolkit for collecting **product listings** and
+**reviews** from Indian marketplaces into structured CSV + JSON + ZIP outputs.
 
-This repository includes:
-- a simple single-URL review scraper for one category or listing page
-- a batch product scraper for a fixed set of categories and subcategories
-- a resumable batch review scraper that can continue long-running jobs without starting over
+Supported sites (status from live runs on 2026-06-21):
 
-The project is designed for practical data collection workflows: scrape product listings first, then enrich those products with review data.
+| Site | Products | Reviews | Live status |
+|------|:--------:|:-------:|-------|
+| **Flipkart** | ✅ | ✅ | Verified working end-to-end. |
+| **Amazon** | ✅ | ✅ with cookies | Listings work logged-out. Reviews need a logged-in session — drop your cookies in `secrets/amazon_cookies.json` (see below). Verified: 40 reviews pulled with cookies. |
+| **Myntra** | ⚠️ blocked | — | Parser verified on fixtures, but Myntra's edge **hard-blocks this server's IP** for every URL. Needs a residential proxy / TLS-impersonation to reach live. |
+| **Meesho** | ✅ | — | Listings verified (reads `__NEXT_DATA__`). Reviews are behind an internal API (not scraped). |
 
-## What it does
+> **What "live status" means:** Flipkart, Amazon (products), and Meesho (products)
+> were run against the real sites and returned correct data. Amazon reviews are
+> gated behind login. Myntra blocks datacenter IPs at its CDN edge — the adapter
+> code is correct (unit-tested against its `__myx` JSON) but can't be reached from
+> a blocked network without a proxy.
 
-`Flipkart Datascape` supports three main workflows.
+### Getting past anti-bot edges
 
-1. `main.py`  
-   Scrape reviews from a single Flipkart category or listing URL and save them incrementally.
+Amazon, Myntra, and Meesho all sit behind bot managers that reject a default
+headless browser. The engine ships a stealth fingerprint that clears Amazon and
+Meesho from a datacenter IP:
 
-2. `scraper.batch_product_scraper`  
-   Scrape up to a fixed number of products for each configured subcategory and write one CSV per subcategory, plus run reports and a ZIP archive.
+- `navigator.webdriver` and other headless tells are patched out
+- the user-agent + client-hint headers are derived from the **real** browser
+  version (so they never drift out of sync)
+- a realistic timezone/locale and no injected global `Referer` (a global Referer
+  deterministically tripped Amazon's 503)
+- block pages are detected and retried with backoff
+- Amazon keeps resource-loading on (skipping sub-resources trips its edge)
 
-3. `scraper.batch_review_scraper`  
-   Read the product CSVs from the batch product scraper, visit each product review page, and write review CSVs with resumable checkpointing.
+## Highlights
 
-## Repository layout
-
-```text
-.
-├── README.md
-├── CONTRIBUTING.md
-├── docs/
-│   └── BATCH_WORKFLOWS.md
-├── main.py
-├── requirements.txt
-├── data/
-│   └── .gitkeep
-├── scraper/
-│   ├── batch_product_scraper.py
-│   ├── batch_review_scraper.py
-│   ├── product_list.py
-│   ├── review_scraper.py
-│   └── utils.py
-└── tests/
-    ├── test_batch_product_scraper.py
-    └── test_batch_review_scraper.py
-```
+- **One interactive app.** Pick a site, pick a mode, set options, go.
+- **Four sites, one fast engine.** All sites share the same browser, concurrency,
+  resume, and reporting machinery via a thin per-site adapter.
+- **Fast by default.** Blocks images/CSS/fonts, waits for real content instead of
+  fixed sleeps, and reuses one browser per worker instead of relaunching per item.
+- **Resumable reviews.** Long review jobs write to disk per product and resume
+  from where they stopped.
+- **Scriptable too.** The same operations are available as flag-based CLI commands.
 
 ## Requirements
 
 - Python 3.11+
-- pip
-- Playwright browser dependencies
+- Playwright Chromium
 
-Install Python dependencies:
+## Quick start (Mac, no Terminal needed)
 
-```bash
-pip install -r requirements.txt
-```
+Handing this to someone non-technical? This is the whole flow:
 
-Install the Playwright browser used by the scraper:
+1. Get the project onto their Mac (clone it, or send them a zip/folder) and open the folder in Finder.
+2. Double-click **`Start Scraper.command`**.
+   - First time only, macOS may show *"cannot be opened because it is from an
+     unidentified developer."* Right-click the file → **Open** → **Open** again.
+     You only need to do this once.
+3. The first run asks for residential proxy details (paste them in, or press
+   Enter to skip if you don't have one yet — everything except Myntra works
+   with no proxy). Then it installs everything automatically (~1-3 minutes on
+   home WiFi) and opens the scraper's menu.
+4. Every run after that: just double-click the same file again — no waiting,
+   no setup.
 
-```bash
-python -m playwright install
-```
-
-If Playwright is already set up on your machine, you only need to do this once.
-
-## Quick start
-
-### Option 1: Scrape reviews from one category or listing URL
-
-Use `main.py` if you want a simple, direct entrypoint.
+## Quick start (Terminal)
 
 ```bash
-python main.py "https://www.flipkart.com/search?q=smartphones" --max-products 20 --output-dir data
+git clone https://github.com/rajivranjanmars/flipkart-datascape.git
+cd flipkart-datascape
+./setup.sh                     # creates .venv, installs deps + Chromium, sets up .env
+.venv/bin/python -m scraper    # or: source .venv/bin/activate && python -m scraper
 ```
 
-What this does:
-- collects up to `20` product URLs from the listing
-- scrapes reviews for each product
-- writes a timestamped CSV such as `data/reviews_20260522_120000.csv`
+`setup.sh` creates a private `.venv`, installs dependencies into it, runs
+`playwright install chromium`, and creates `.env` — prompting once for
+residential proxy credentials (needed for Myntra; see
+[Residential proxy](#residential-proxy) below) if you don't already have them
+set. It's safe to re-run any time; later runs are fast no-ops.
 
-### Option 2: Scrape products for all configured subcategories
+## The interactive app
 
 ```bash
-python -m scraper.batch_product_scraper \
-  --output-dir data/runs/20260522_products \
-  --max-products 100 \
-  --concurrency 4 \
-  --retries 2
+python -m scraper        # or:  python main.py
 ```
 
-This writes:
-- one CSV per subcategory
-- `run_report.json`
-- `run_report.txt`
-- `flipkart_product_csvs.zip`
+You'll get menus:
 
-### Option 3: Scrape reviews for the batch product output
+1. **Choose a marketplace** — Flipkart / Amazon / Myntra / Meesho
+2. **Choose what to do**
+   - Scrape product listings (all preset categories)
+   - Scrape product listings (custom search query or listing URL)
+   - Scrape reviews (from a product folder) — *review-capable sites only*
+   - Full pipeline (products → reviews)
+3. **Set options** — max products/reviews, speed profile, concurrency, output dir
+4. **Confirm and run** — live progress, everything written under `data/runs/...`
+
+### Logged-in scraping (cookies)
+
+Some pages (e.g. Amazon's review pages) require a logged-in session. Export your
+cookies and the scraper will use them:
+
+1. Log into the site in your own browser.
+2. Export cookies with a browser extension (Cookie-Editor / EditThisCookie) — the
+   JSON export format is supported as-is, as is the native Playwright format.
+3. Save them to `secrets/<site>_cookies.json` (e.g. `secrets/amazon_cookies.json`).
+   The `secrets/` folder is **gitignored** — cookies are credentials, never commit them.
+
+The scraper auto-discovers `secrets/<site>_cookies.json`, or pass `--cookies PATH`
+explicitly. When cookies load you'll see `Using N auth cookie(s) ... (logged-in session)`.
+
+> Cookies grant access to your account. Treat the file like a password, and sign
+> out / rotate the session when you're done.
+
+### Residential proxy
+
+Myntra's CDN hard-blocks datacenter IPs for every URL, so it only becomes reachable
+through a residential (or other IP-rotating) proxy. Flipkart, Amazon, and Meesho
+all work fine with no proxy.
+
+`./setup.sh` (and `Start Scraper.command` on Mac) already prompts for these
+credentials interactively on first run and writes `.env` for you — you don't
+need to do anything below unless you want to add or change them later. To do
+it by hand instead, copy `.env.example` to `.env` and fill in your provider's
+credentials:
 
 ```bash
-python -m scraper.batch_review_scraper \
-  --product-dir data/runs/20260522_products \
-  --output-dir data/runs/20260522_reviews \
-  --max-reviews 100 \
-  --concurrency 4 \
-  --retries 2
+cp .env.example .env
 ```
 
-For very large collection jobs, use conservative settings and resumable output:
+```dotenv
+PROXY_SERVER=http://gate.your-proxy-provider.com:8000
+PROXY_USERNAME=your-username
+PROXY_PASSWORD=your-password
+```
+
+`.env` is loaded automatically — no flags needed. Every browser session (all
+sites, all commands) picks up the proxy once `PROXY_SERVER` is set; leave it
+blank or delete `.env` to scrape without a proxy, same as before. `.env` is
+gitignored — never commit real credentials.
+
+### Speed profiles
+
+| Profile | Resource blocking | Waits | Concurrency | When to use |
+|---------|:-----------------:|:-----:|:-----------:|-------------|
+| `fast` | on | minimal | 8 | Quick bulk collection (default for big runs). |
+| `balanced` | on | moderate | 4 | Sensible default. |
+| `polite` | off | longer | 2 | Gentlest on the site; loads everything. |
+
+## Scriptable CLI
+
+The interactive app launches when you pass no arguments. With arguments it runs
+one operation and exits — good for cron/CI.
 
 ```bash
-python -m scraper.batch_review_scraper \
-  --product-dir data/runs/20260522_products \
-  --output-dir data/runs/20260522_reviews \
-  --max-reviews 0 \
-  --concurrency 1 \
-  --retries 3 \
-  --wait-seconds 8 \
-  --empty-retry-wait-seconds 12 \
-  --page-delay-seconds 2 \
-  --product-delay-seconds 5
+# List supported sites
+python -m scraper --list-sites
+
+# Product listings for all preset categories
+python -m scraper products --site flipkart --output-dir data/runs/fk_products --max-products 100 --profile fast
+
+# A single custom search (or a full listing URL)
+python -m scraper search "wireless earbuds" --site amazon --output-dir data/runs/az_search --max-products 50
+
+# Reviews from a product folder (resumable; rerun the same command to resume)
+python -m scraper reviews --site flipkart --product-dir data/runs/fk_products --output-dir data/runs/fk_reviews --max-reviews 0 --concurrency 8
+
+# End-to-end: products then reviews
+python -m scraper pipeline --site flipkart --output-dir data/runs/fk_all --max-products 50 --max-reviews 50
 ```
 
-In this mode:
-- `--max-reviews 0` means uncapped review scraping per product
-- completed products are written to disk immediately
-- rerunning the same command resumes from `product_review_status.csv`
-- progress logs include timestamps and elapsed runtime
+`--max-reviews 0` means uncapped. `--concurrency 0` uses the profile default.
 
-## Configured batch coverage
+## Architecture
 
-The batch product scraper is configured for 18 subcategories across:
-- Beauty & Care
-- Clothing
-- Electronics
-- Footwear
-- Wearable Devices
+```text
+scraper/
+├── app.py            # interactive terminal app (rich menus)
+├── cli.py            # flag-based CLI (argparse)
+├── runner.py         # high-level ops + speed profiles (shared by app & cli)
+├── core/             # site-agnostic engine
+│   ├── browser.py    #   fast Playwright fetch: resource blocking, selector waits, reusable sessions
+│   ├── engine.py     #   generic listing + review pagination
+│   ├── batch.py      #   concurrency, resume ledger, reports, zip
+│   ├── models.py     #   dataclasses + CSV schemas
+│   └── textutils.py  #   slugify / normalize helpers
+└── sites/            # per-marketplace adapters (pure site knowledge)
+    ├── base.py       #   SiteAdapter contract
+    ├── flipkart.py   ├── amazon.py
+    └── myntra.py     └── meesho.py
+```
 
-The exact target list lives in `scraper.batch_product_scraper.SUBCATEGORY_TARGETS`.
+To add a marketplace: implement a `SiteAdapter` subclass in `scraper/sites/`,
+register it in `scraper/sites/registry.py`, and it inherits all the speed,
+concurrency, resume, and reporting machinery for free.
+
+## Why it's faster than a naive scraper
+
+Three concrete levers, all in `core/browser.py` and `core/engine.py`:
+
+1. **Resource blocking** — images, media, fonts, and stylesheets are aborted.
+   Only the HTML/JSON we parse is downloaded.
+2. **Content-aware waits** — pages wait for a real content selector and a short
+   settle, instead of a flat multi-second sleep on every page.
+3. **Browser reuse** — each batch worker keeps one browser alive across all its
+   items rather than launching (and priming) Chromium per product.
 
 ## Output files
 
-### Product batch output
-
-A product run directory contains files like:
+**Products** (`<site>` is `flipkart`, `amazon`, ...):
 
 ```text
-beauty-care-bath-body.csv
-beauty-care-fragrances.csv
-...
-run_report.json
-run_report.txt
-flipkart_product_csvs.zip
+<category>-<subcategory>.csv     # one per preset category
+run_report.json / run_report.txt
+<site>_product_csvs.zip
 ```
 
-Each product CSV contains:
-- `category`
-- `subcategory`
-- `title`
-- `price`
-- `rating`
-- `ratings_count`
-- `reviews_count`
-- `product_url`
-- `product_id`
-- `source_url`
-
-### Review batch output
-
-A review run directory contains files like:
+**Reviews:**
 
 ```text
 combined_reviews.csv
-beauty-care-bath-body-reviews.csv
-...
-product_review_status.csv
-empty_products.csv
-failed_products.csv
-review_run_report.json
-review_run_report.txt
-scrape_config.json
-flipkart_review_csvs.zip
+<category>-<subcategory>-reviews.csv
+product_review_status.csv        # the resume ledger
+empty_products.csv / failed_products.csv
+review_run_report.json / .txt
+<site>_review_csvs.zip
 ```
-
-`product_review_status.csv` is the key resume ledger. If a long-running job stops, rerun the same command against the same `--output-dir`.
-
-## Documentation
-
-- [Batch Workflows](docs/BATCH_WORKFLOWS.md)
-- [Contributing](CONTRIBUTING.md)
-
-## Typical usage pattern
-
-For most users, the recommended sequence is:
-
-1. Run the product batch scraper.
-2. Inspect the generated product CSVs.
-3. Run the review batch scraper using that product directory.
-4. Resume the review scraper with the same command if the run is interrupted.
 
 ## Testing
 
-Run the current test suite with:
-
 ```bash
-python -m unittest tests.test_batch_product_scraper tests.test_batch_review_scraper
+python -m unittest tests.test_engine tests.test_adapters tests.test_batch tests.test_browser tests.test_cookies
+python -m py_compile scraper/*.py scraper/core/*.py scraper/sites/*.py
 ```
 
-You can also compile-check the scraper modules:
-
-```bash
-python -m py_compile scraper/batch_product_scraper.py scraper/batch_review_scraper.py
-```
-
-## Notes on generated data
-
-Generated scrape outputs and logs are intentionally excluded from git tracking. The repository keeps the code and docs public-facing, while run artifacts stay local.
-
-## Limitations
-
-- Flipkart page structure may change over time.
-- Large uncapped review runs can take a long time.
-- Network throttling and empty responses can reduce completeness.
-- This project does not guarantee stable extraction for every category or product page layout.
+Tests run fully offline using HTML/JSON fixtures and a fake browser session — no
+network required.
 
 ## Responsible use
 
-Before scraping any website at scale, review the site's terms, robots guidance, and applicable local rules. Use conservative request patterns and avoid disruptive traffic.
+Review each site's terms, robots guidance, and applicable rules before scraping
+at scale. Prefer the `polite` profile, modest concurrency, and reasonable caps.
+The new Amazon/Myntra/Meesho adapters are best-effort and may need tuning.
+
+## License
+
+[MIT](LICENSE)

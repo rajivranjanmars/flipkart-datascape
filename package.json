@@ -1,0 +1,28 @@
+{
+  "name": "flipkart-data-scrap",
+  "version": "1.0.0",
+  "description": "A Python toolkit for collecting Flipkart product listings and review data in structured CSV, JSON, and ZIP outputs.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rajivranjanmars/flipkart-datascape.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/rajivranjanmars/flipkart-datascape/issues"
+  },
+  "homepage": "https://github.com/rajivranjanmars/flipkart-datascape#readme",
+  "dependencies": {
+    "pptxgenjs": "^4.0.1"
+  }
+}

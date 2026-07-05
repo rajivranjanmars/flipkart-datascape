@@ -60,3 +60,17 @@ data/*.json
 data/*.txt
 data/*.zip
 data/runs/
+
+# Secrets: auth cookies for logged-in scraping (NEVER commit these)
+secrets/*
+!secrets/.gitkeep
+*cookies*.json
+
+# Local environment / proxy credentials (see .env.example) — NEVER commit this
+.env
+
+# Node dependencies (used only by tools/generate_batch_scraper_report.js)
+node_modules/
+
+# Unrelated / large local files that don't belong in this repo
+*.rar
