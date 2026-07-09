@@ -6,15 +6,30 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
-if ! command -v python3 >/dev/null 2>&1; then
+# Prefer the newest Python available; Apple's bundled python3 can be as old
+# as 3.9, which mostly works but is not what the project targets (3.11+).
+PYTHON=""
+for candidate in python3.13 python3.12 python3.11 python3.10 python3; do
+  if command -v "$candidate" >/dev/null 2>&1; then
+    PYTHON="$candidate"
+    break
+  fi
+done
+
+if [ -z "$PYTHON" ]; then
   echo "Python 3 isn't installed on this machine."
   echo "Install it from https://www.python.org/downloads/ and then run this again."
   exit 1
 fi
 
+if ! "$PYTHON" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)'; then
+  echo "Note: your Python is $("$PYTHON" -V 2>&1). The scraper still runs, but"
+  echo "installing a newer Python (https://www.python.org/downloads/) is recommended."
+fi
+
 if [ ! -d .venv ]; then
-  echo "==> Creating a private Python environment (.venv)"
-  python3 -m venv .venv
+  echo "==> Creating a private Python environment (.venv) using $PYTHON"
+  "$PYTHON" -m venv .venv
 fi
 
 PY=.venv/bin/python

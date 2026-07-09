@@ -46,7 +46,9 @@ Logger = Callable[[str], None]
 # Logging
 # --------------------------------------------------------------------------- #
 def _utc_now() -> dt.datetime:
-    return dt.datetime.now(dt.UTC)
+    # dt.timezone.utc, not dt.UTC: the latter needs Python 3.11+, and Macs
+    # ship an Apple Python 3.9 that setup.sh may fall back to.
+    return dt.datetime.now(dt.timezone.utc)
 
 
 def _format_elapsed(total_seconds: float) -> str:
