@@ -12,6 +12,7 @@ import atexit
 import csv
 import datetime as dt
 import json
+import time
 import zipfile
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -138,9 +139,15 @@ def _review_product_worker(
     retries: int,
     settle_ms: int,
     page_delay_seconds: float,
+    product_delay_seconds: float = 0.0,
 ) -> tuple[list[dict[str, object]], str, str]:
     adapter: SiteAdapter = _WORKER["adapter"]  # type: ignore[assignment]
     session = _worker_session()
+    if product_delay_seconds > 0:
+        # Pause between products (not before this worker's first one).
+        if _WORKER.get("had_product"):
+            time.sleep(product_delay_seconds)
+        _WORKER["had_product"] = True
     return scrape_product_reviews(
         adapter,
         product,
@@ -460,6 +467,7 @@ def run_review_batch(
     retries: int = 2,
     settle_ms: int = 350,
     page_delay_seconds: float = 0.0,
+    product_delay_seconds: float = 0.0,
     resume: bool = True,
     block_resources: bool = True,
     cookies: list[dict] | None = None,
@@ -484,6 +492,7 @@ def run_review_batch(
         f"already_done={len(completed)} pending={len(pending)} "
         f"max_reviews={'uncapped' if max_reviews <= 0 else max_reviews} "
         f"concurrency={max(1, min(concurrency, max(1, len(pending))))} resume={'on' if resume else 'off'}"
+        + (f" product_delay={product_delay_seconds:g}s" if product_delay_seconds > 0 else "")
     )
 
     if not pending:
@@ -511,7 +520,9 @@ def run_review_batch(
     try:
         if concurrency == 1:
             with BrowserSession(**session_kwargs) as session:  # type: ignore[arg-type]
-                for product in pending:
+                for index, product in enumerate(pending):
+                    if product_delay_seconds > 0 and index > 0:
+                        time.sleep(product_delay_seconds)
                     raw, status, error = scrape_product_reviews(
                         adapter,
                         product,
@@ -536,6 +547,7 @@ def run_review_batch(
                         retries,
                         settle_ms,
                         page_delay_seconds,
+                        product_delay_seconds,
                     ): product
                     for product in pending
                 }

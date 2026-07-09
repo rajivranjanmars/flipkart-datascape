@@ -69,6 +69,13 @@ def build_parser() -> argparse.ArgumentParser:
     reviews.add_argument("--concurrency", type=int, default=0, help="0 = use profile default.")
     reviews.add_argument("--retries", type=int, default=2)
     reviews.add_argument("--no-resume", action="store_true")
+    reviews.add_argument(
+        "--product-delay",
+        type=float,
+        default=0.0,
+        help="Seconds to pause between products (per worker). Use with low "
+        "concurrency to back off a site that is throttling review pages.",
+    )
 
     pipeline = sub.add_parser("pipeline", help="Products then reviews end-to-end.")
     _add_site(pipeline)
@@ -76,6 +83,12 @@ def build_parser() -> argparse.ArgumentParser:
     pipeline.add_argument("--max-products", type=int, default=50)
     pipeline.add_argument("--max-reviews", type=int, default=50)
     pipeline.add_argument("--retries", type=int, default=2)
+    pipeline.add_argument(
+        "--product-delay",
+        type=float,
+        default=0.0,
+        help="Seconds to pause between products during the review step (per worker).",
+    )
 
     return parser
 
@@ -149,6 +162,7 @@ def main(argv: list[str] | None = None) -> int:
             concurrency=concurrency,
             retries=args.retries,
             resume=not args.no_resume,
+            product_delay_seconds=args.product_delay,
             profile=profile,
             cookies=cookies,
         )
@@ -159,6 +173,7 @@ def main(argv: list[str] | None = None) -> int:
             max_products=args.max_products,
             max_reviews=args.max_reviews,
             retries=args.retries,
+            product_delay_seconds=args.product_delay,
             profile=profile,
             cookies=cookies,
         )
