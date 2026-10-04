@@ -15,7 +15,10 @@
     "url": "git+https://github.com/rajivranjanmars/flipkart-datascape.git"
   },
   "keywords": [],
-  "author": "",
+  "author": {
+    "name": "rajivranjanmars",
+    "url": "https://rajivranjana.in"
+  },
   "license": "ISC",
   "type": "commonjs",
   "bugs": {
@@ -24,5 +27,8 @@
   "homepage": "https://github.com/rajivranjanmars/flipkart-datascape#readme",
   "dependencies": {
     "pptxgenjs": "^4.0.1"
+  },
+  "overrides": {
+    "image-size": "^2.0.3"
   }
 }

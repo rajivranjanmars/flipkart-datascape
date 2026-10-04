@@ -246,3 +246,7 @@ The new Amazon/Myntra/Meesho adapters are best-effort and may need tuning.
 ## License
 
 [MIT](LICENSE)
+
+## Author
+
+[rajivranjanmars](https://rajivranjana.in)

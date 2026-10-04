@@ -4,7 +4,7 @@ const PptxGenJS = require("pptxgenjs");
 
 const pptx = new PptxGenJS();
 pptx.layout = "LAYOUT_WIDE";
-pptx.author = "OpenAI Codex";
+pptx.author = "rajivranjanmars (https://rajivranjana.in)";
 pptx.company = "Rajiv Personal Agent";
 pptx.subject = "Flipkart batch scraper academic project report";
 pptx.title = "Flipkart data scraps";
