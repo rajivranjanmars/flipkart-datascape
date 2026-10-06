@@ -249,4 +249,4 @@ The new Amazon/Myntra/Meesho adapters are best-effort and may need tuning.
 
 ## Author
 
-[rajivranjanmars](https://rajivranjana.in)
+[Rajiv Ranjan](https://rajivranjan.in)
